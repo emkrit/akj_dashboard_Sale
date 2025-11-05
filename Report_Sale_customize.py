@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import matplotlib
+from matplotlib import font_manager as fm
+import os
 
 # =====================================================
 # 0. PAGE CONFIG & GLOBAL STYLE
@@ -11,8 +13,34 @@ import matplotlib
 st.set_page_config(page_title="📊 Commission Dashboard", layout="wide")
 st.title("📊 รายงานยอดขายและค่าคอมมิชชั่น")
 
-# Try to use a Thai-capable font (works on Windows).
-matplotlib.rcParams['font.family'] = 'Tahoma'
+# ---- Thai font setup (works on Streamlit Cloud/Linux) ----
+def set_thai_font():
+    candidate_fonts = [
+        ("Noto Sans Thai", "fonts/NotoSansThai-Regular.ttf"),
+        ("Sarabun",        "fonts/Sarabun-Regular.ttf"),
+        ("TH Sarabun New", "fonts/THSarabunNew.ttf"),
+    ]
+    picked = None
+    for family, path in candidate_fonts:
+        if os.path.exists(path):
+            try:
+                fm.fontManager.addfont(path)
+                picked = family
+                break
+            except Exception:
+                pass
+
+    # Fallback names if host already has them
+    if not picked:
+        picked = "Noto Sans Thai"
+
+    matplotlib.rcParams["font.family"] = picked
+    matplotlib.rcParams["font.sans-serif"] = [
+        picked, "Sarabun", "TH Sarabun New", "Tahoma", "Arial Unicode MS", "DejaVu Sans"
+    ]
+    matplotlib.rcParams["axes.unicode_minus"] = False
+
+set_thai_font()
 
 # =====================================================
 # 1. LOAD DATA FROM GOOGLE SHEET
@@ -31,10 +59,7 @@ def load_data():
 
     # Clean money column 'เป็นเงิน'
     df["เป็นเงิน"] = (
-        df["เป็นเงิน"]
-        .astype(str)
-        .str.replace(",", "", regex=False)
-        .astype(float)
+        df["เป็นเงิน"].astype(str).str.replace(",", "", regex=False).astype(float)
     )
 
     # Ensure required columns exist
@@ -134,7 +159,7 @@ def plot_stacked(pivot_df: pd.DataFrame, title_main: str, legend_title: str):
 
     for cat in pivot_df.columns:
         heights = pivot_df[cat].values
-        bars = ax.bar(
+        ax.bar(
             x_positions,
             heights,
             bottom=bottoms,
@@ -279,7 +304,6 @@ st.pyplot(fig_yearly, use_container_width=True)
 st.markdown("---")
 st.subheader("📈 เปรียบเทียบรายไตรมาสตาม Sales_CO_Combine (ในปีที่เลือก)")
 
-# Choices (exclude the "All" helper)
 sales_choices_only = sorted([s for s in df["Sales_CO_Combine"].dropna().unique().tolist() if s != "All"])
 
 colSA, colSB, colSY = st.columns([1,1,1])
