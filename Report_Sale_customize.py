@@ -26,9 +26,9 @@ def set_thai_font():
     # Gather candidates recursively (Noto Sans Thai & Sarabun families)
     # Works with paths like fonts/Noto_Sans_Thai/static/NotoSansThai-Regular.ttf
     patterns = [
-        "**/NotoSansThai-*.ttf",
-        "**/NotoSansThai*.ttf",
-        "**/Sarabun-*.ttf",
+        "**/NotoSansThai-Regular.ttf",   # preferred static regular font
+        "**/NotoSansThai-*.ttf",         # any Noto Sans Thai variant (Bold, Light, etc.)
+        "**/Sarabun-*.ttf",              # Sarabun font family
         "**/Sarabun*.ttf",
         "**/THSarabunNew*.ttf",
     ]
