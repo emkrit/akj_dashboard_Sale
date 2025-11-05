@@ -5,6 +5,7 @@ import seaborn as sns
 import numpy as np
 import matplotlib
 from matplotlib import font_manager as fm
+from pathlib import Path
 import os
 
 # =====================================================
@@ -13,32 +14,73 @@ import os
 st.set_page_config(page_title="📊 Commission Dashboard", layout="wide")
 st.title("📊 รายงานยอดขายและค่าคอมมิชชั่น")
 
-# ---- Thai font setup (works on Streamlit Cloud/Linux) ----
+# ---- Thai font setup (robust: searches recursively in ./fonts) ----
 def set_thai_font():
-    candidate_fonts = [
-        ("Noto Sans Thai", "fonts/NotoSansThai-Regular.ttf"),
-        ("Sarabun",        "fonts/Sarabun-Regular.ttf"),
-        ("TH Sarabun New", "fonts/THSarabunNew.ttf"),
+    """
+    Find and register a Thai-capable TTF in ./fonts (any subfolder),
+    including VariableFont files from Google Fonts. Then set rcParams.
+    """
+    here = Path(__file__).resolve().parent
+    font_dir = here / "fonts"
+
+    # Gather candidates recursively (Noto Sans Thai & Sarabun families)
+    # Works with paths like fonts/Noto_Sans_Thai/static/NotoSansThai-Regular.ttf
+    patterns = [
+        "**/NotoSansThai-*.ttf",
+        "**/NotoSansThai*.ttf",
+        "**/Sarabun-*.ttf",
+        "**/Sarabun*.ttf",
+        "**/THSarabunNew*.ttf",
     ]
-    picked = None
-    for family, path in candidate_fonts:
-        if os.path.exists(path):
+    candidates = []
+    if font_dir.exists():
+        for pat in patterns:
+            candidates.extend(sorted(font_dir.glob(pat)))
+
+    picked_family = None
+    picked_path = None
+
+    for path in candidates:
+        try:
+            fm.fontManager.addfont(str(path))
+            # Get the real family name from the file (don’t assume)
+            family = fm.FontProperties(fname=str(path)).get_name()
+            picked_family = family
+            picked_path = path
+            break
+        except Exception as e:
+            # Try next candidate
+            continue
+
+    # Final fallback by name if the system already has a Thai font installed
+    if not picked_family:
+        # Try by family name (may exist on the host)
+        for fam in ["Noto Sans Thai", "Sarabun", "TH Sarabun New", "Tahoma", "Arial Unicode MS"]:
             try:
-                fm.fontManager.addfont(path)
-                picked = family
+                # Check if Matplotlib can find a font with this family
+                _ = fm.findfont(fam, fallback_to_default=False)
+                picked_family = fam
                 break
             except Exception:
-                pass
+                continue
 
-    # Fallback names if host already has them
-    if not picked:
-        picked = "Noto Sans Thai"
+    # If still nothing, just keep defaults (won’t render Thai correctly)
+    if not picked_family:
+        st.warning("ไม่พบฟอนต์ภาษาไทยในโฟลเดอร์ fonts/ และระบบไม่มีฟอนต์ที่รองรับไทย")
+        picked_family = "DejaVu Sans"  # non-Thai fallback
 
-    matplotlib.rcParams["font.family"] = picked
+    # Apply font settings
+    matplotlib.rcParams["font.family"] = picked_family
     matplotlib.rcParams["font.sans-serif"] = [
-        picked, "Sarabun", "TH Sarabun New", "Tahoma", "Arial Unicode MS", "DejaVu Sans"
+        picked_family, "Sarabun", "TH Sarabun New", "Tahoma", "Arial Unicode MS", "DejaVu Sans"
     ]
     matplotlib.rcParams["axes.unicode_minus"] = False
+
+    # Tiny debug line so you can confirm which font is used
+    msg = f"🆗 ใช้ฟอนต์สำหรับกราฟ: **{picked_family}**"
+    if picked_path:
+        msg += f"  (จากไฟล์: `{picked_path.name}`)"
+    st.caption(msg)
 
 set_thai_font()
 
@@ -47,8 +89,8 @@ set_thai_font()
 # =====================================================
 @st.cache_data(show_spinner=False)
 def load_data():
-    sheet_name = 'Comission_dashboard'  # <- your sheet
-    sheet_id = '1GdOUIMfTOODsmBIo7Djf3RiG3kSGuVmq5xWbAvGHGcc'  # <- your sheet ID
+    sheet_name = 'Comission_dashboard'
+    sheet_id = '1GdOUIMfTOODsmBIo7Djf3RiG3kSGuVmq5xWbAvGHGcc'
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
 
     df = pd.read_csv(url)
@@ -129,13 +171,7 @@ def prep_stacked(df_in: pd.DataFrame, stack_col: str):
         .groupby(["Month", "MonthLabel", stack_col], as_index=False)["เป็นเงิน"]
         .sum()
     )
-
-    pivot_df = tmp.pivot(
-        index="MonthLabel",
-        columns=stack_col,
-        values="เป็นเงิน"
-    ).fillna(0)
-
+    pivot_df = tmp.pivot(index="MonthLabel", columns=stack_col, values="เป็นเงิน").fillna(0)
     return pivot_df
 
 def sort_month_index(pivot_df: pd.DataFrame):
